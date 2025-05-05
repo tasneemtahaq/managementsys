@@ -46,6 +46,27 @@ class RestaurantDB:
                 FOREIGN KEY(menu_id) REFERENCES menu(id) ON DELETE CASCADE
             )
         """)
+
+         # Create miscellaneous_expense table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS miscellaneous_expense (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                date DATE DEFAULT (DATE('now')),
+                amount REAL,
+                note TEXT
+            )
+        """)
+        # Create billings table
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS billings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                month TEXT,
+                total_amount REAL
+            )
+        """)
+        self.conn.commit()
+
+        
         # Migrate menu
         cursor.execute("PRAGMA table_info(menu)")
         if 'cost' not in [col[1] for col in cursor.fetchall()]:
@@ -101,6 +122,22 @@ class RestaurantDB:
         )
         df['profit'] = df['total_revenue'] - df['total_cost']
         return df
+    
+    def add_misc_expense(self, amount, note):
+        cursor = self.conn.cursor()
+        cursor.execute("INSERT INTO miscellaneous_expense (amount, note) VALUES (?, ?)", (amount, note))
+        self.conn.commit()
+
+    def get_misc_expenses(self):
+        return pd.read_sql_query("SELECT date, amount, note FROM miscellaneous_expense", self.conn, parse_dates=['date'])
+
+    def add_billing(self, month, total_amount):
+        cursor = self.conn.cursor()
+        cursor.execute("INSERT INTO billings (month, total_amount) VALUES (?, ?)", (month, total_amount))
+        self.conn.commit()
+
+    def get_billings(self):
+        return pd.read_sql_query("SELECT month, total_amount FROM billings", self.conn)
 
 # Streamlit UI
 st.title("🍽️ Restaurant Management System")
@@ -162,3 +199,24 @@ else:
     st.line_chart(grouped)
     st.dataframe(grouped)
 
+   # Miscellaneous Expenses
+st.header("💸 Miscellaneous Expenses")
+amount = st.number_input("Expense Amount", min_value=0.0)
+note = st.text_input("Note")
+if st.button("Add Expense"):
+    db.add_misc_expense(amount, note)
+    st.success("Expense added")
+
+misc_df = db.get_misc_expenses()
+st.dataframe(misc_df)
+
+# Billings Section
+st.header("📆 Monthly Billings")
+bill_month = st.text_input("Billing Month (e.g., 2025-05)")
+bill_amount = st.number_input("Total Billing Amount", min_value=0.0)
+if st.button("Add Billing"):
+    db.add_billing(bill_month, bill_amount)
+    st.success("Billing added")
+
+billing_df = db.get_billings()
+st.dataframe(billing_df)
